@@ -1,0 +1,197 @@
+rules_version = '2';
+service cloudfire store {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Default Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL REUSABLE HELPERS ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.email != null);
+    }
+
+    // Helper to extract incoming and existing resources cleanly
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Administrator checks: Checks if email is the bootstrapped user email or registered Admin in users collection
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'rezakamaliarfa@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin')
+      );
+    }
+
+    // --- ENTITY SPECIFIC SCHEMAS & VALIDATION BLUEPRINTS ---
+
+    function isValidMachine(data) {
+      return data.keys().hasAll(['id', 'name', 'type', 'location', 'serialNumber', 'status', 'criticalityLevel', 'installationDate', 'lastMaintenanceDate', 'createdAt', 'updatedAt'])
+        && data.keys().size() == 11
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 200
+        && data.type is string && data.type.size() <= 100
+        && data.location is string && data.location.size() <= 100
+        && data.serialNumber is string && data.serialNumber.size() <= 100
+        && data.status is string && (data.status == 'Healthy' || data.status == 'Warning' || data.status == 'Critical' || data.status == 'Offline')
+        && data.criticalityLevel is string && (data.criticalityLevel == 'Low' || data.criticalityLevel == 'Medium' || data.criticalityLevel == 'High')
+        && data.installationDate is string
+        && data.lastMaintenanceDate is string
+        && data.createdAt is string
+        && data.updatedAt is string;
+    }
+
+    function isValidSensorReading(data) {
+      return data.keys().hasAll(['machineId', 'temperature', 'vibration', 'pressure', 'rotationalSpeed', 'torque', 'toolWear', 'humidity', 'powerConsumption', 'timestamp'])
+        && data.keys().size() == 10
+        && data.machineId is string && data.machineId.size() <= 128
+        && data.temperature is number
+        && data.vibration is number
+        && data.pressure is number
+        && data.rotationalSpeed is number
+        && data.torque is number
+        && data.toolWear is number
+        && data.humidity is number
+        && data.powerConsumption is number
+        && data.timestamp is string;
+    }
+
+    function isValidPrediction(data) {
+      return data.keys().hasAll(['machineId', 'healthScore', 'failureProbability', 'riskLevel', 'recommendedAction', 'updatedAt'])
+        && data.keys().size() == 6
+        && data.machineId is string && data.machineId.size() <= 128
+        && data.healthScore is number
+        && data.failureProbability is number
+        && data.riskLevel is string && (data.riskLevel == 'Low' || data.riskLevel == 'Medium' || data.riskLevel == 'High' || data.riskLevel == 'Critical')
+        && data.recommendedAction is string && data.recommendedAction.size() <= 1000
+        && data.updatedAt is string;
+    }
+
+    function isValidAlert(data) {
+      return data.keys().hasAll(['id', 'machineId', 'machineName', 'title', 'message', 'severity', 'status', 'createdAt'])
+        && data.keys().size() == 8
+        && data.id is string && data.id.size() <= 128
+        && data.machineId is string && data.machineId.size() <= 128
+        && data.machineName is string && data.machineName.size() <= 200
+        && data.title is string && data.title.size() <= 200
+        && data.message is string && data.message.size() <= 1000
+        && data.severity is string && (data.severity == 'Info' || data.severity == 'Warning' || data.severity == 'High' || data.severity == 'Critical')
+        && data.status is string && (data.status == 'Active' || data.status == 'Acknowledged' || data.status == 'Resolved')
+        && data.createdAt is string;
+    }
+
+    function isValidWorkOrder(data) {
+      return data.keys().hasAll(['id', 'title', 'description', 'machineId', 'machineName', 'assignedTo', 'priority', 'status', 'dueDate', 'createdAt'])
+        && (data.keys().size() == 10 || (data.keys().size() == 11 && data.keys().hasAll(['completedAt'])))
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 200
+        && data.description is string && data.description.size() <= 2000
+        && data.machineId is string && data.machineId.size() <= 128
+        && data.machineName is string && data.machineName.size() <= 200
+        && data.assignedTo is string && data.assignedTo.size() <= 200
+        && data.priority is string && (data.priority == 'Low' || data.priority == 'Medium' || data.priority == 'High' || data.priority == 'Urgent')
+        && data.status is string && (data.status == 'Open' || data.status == 'In Progress' || data.status == 'Done' || data.status == 'Cancelled')
+        && data.dueDate is string
+        && data.createdAt is string;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role'])
+        && (data.keys().size() == 4 || (data.keys().size() == 5 && data.keys().hasAll(['photoURL'])))
+        && data.uid is string && data.uid == request.auth.uid
+        && data.role is string && (data.role == 'Admin' || data.role == 'Technician')
+        && (data.email == null || data.email is string);
+    }
+
+    // --- CORES MATCH RULES ENFORCEMENT ---
+
+    // 1. User Profiles Collection
+    match /users/{userId} {
+      allow get: if isVerified();
+      allow list: if isVerified();
+      // Users can register/update their profile, but cannot self-assign Admin role (unless they are the bootstrapped email or already admin)
+      allow create, update: if isVerified() 
+        && isValidId(userId) 
+        && userId == request.auth.uid 
+        && isValidUser(incoming())
+        && (incoming().role == 'Technician' || request.auth.token.email == 'rezakamaliarfa@gmail.com' || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // 2. Heavy Machines Fleet
+    match /machines/{machineId} {
+      allow get: if isVerified() && isValidId(machineId);
+      allow list: if isVerified();
+      // Only admins can modify fleet definition registry
+      allow create: if isAdmin() && isValidId(machineId) && isValidMachine(incoming());
+      allow update: if isVerified() && isValidId(machineId) && isValidMachine(incoming()) && (
+        isAdmin() ||
+        // Action: Technician status update
+        (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+      );
+      allow delete: if isAdmin() && isValidId(machineId);
+    }
+
+    // 3. IoT Sensor Readings
+    match /sensorReadings/{readingId} {
+      allow get, list: if isVerified();
+      // Readings can be pushed if authenticated and verified
+      allow create: if isVerified() && isValidId(readingId) && isValidSensorReading(incoming()) && exists(/databases/$(database)/documents/machines/$(incoming().machineId));
+      allow update: if isAdmin() && isValidId(readingId);
+      allow delete: if isAdmin() && isValidId(readingId);
+    }
+
+    // 4. ML Failure Predictions
+    match /predictions/{predictionId} {
+      allow get, list: if isVerified();
+      allow create, update: if isVerified() && isValidId(predictionId) && isValidPrediction(incoming()) && exists(/databases/$(database)/documents/machines/$(incoming().machineId));
+      allow delete: if isAdmin() && isValidId(predictionId);
+    }
+
+    // 5. Active Telemetry Incident Alerts
+    match /alerts/{alertId} {
+      allow get: if isVerified() && isValidId(alertId);
+      allow list: if isVerified();
+      allow create: if isVerified() && isValidId(alertId) && isValidAlert(incoming()) && exists(/databases/$(database)/documents/machines/$(incoming().machineId));
+      allow update: if isVerified() && isValidId(alertId) && isValidAlert(incoming()) && (
+        isAdmin() ||
+        // Action: Technician can acknowledge or resolve alerts
+        (incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+      );
+      allow delete: if isAdmin() && isValidId(alertId);
+    }
+
+    // 6. Maintenance Work Orders
+    match /workOrders/{workOrderId} {
+      allow get: if isVerified() && isValidId(workOrderId);
+      allow list: if isVerified();
+      allow create: if isVerified() && isValidId(workOrderId) && isValidWorkOrder(incoming()) && exists(/databases/$(database)/documents/machines/$(incoming().machineId));
+      allow update: if isVerified() && isValidId(workOrderId) && isValidWorkOrder(incoming()) && (
+        isAdmin() ||
+        // Action: Technician operational status update of assigned task
+        (
+          (existing().assignedTo == request.auth.token.email || existing().assignedTo == '' || existing().assignedTo == null) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'completedAt']) &&
+          existing().status != 'Done' // Done is terminal
+        )
+      );
+      allow delete: if isAdmin() && isValidId(workOrderId);
+    }
+  }
+}

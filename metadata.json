@@ -1,0 +1,6 @@
+{
+  "name": "FactoryPulse AI",
+  "description": "Industrial predictive maintenance dashboard designed for cloud machinery telemetry monitoring, containing predictive risk engine, real-time trigger alarms, work order management, translation support (EN/FA) and AI components analyzer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

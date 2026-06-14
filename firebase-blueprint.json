@@ -1,0 +1,112 @@
+{
+  "entities": {
+    "Machine": {
+      "title": "Machine",
+      "description": "Industrial asset registered in the facility fleet",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique identifier of the asset" },
+        "name": { "type": "string", "description": "Display name of the machinery" },
+        "type": { "type": "string", "enum": ["Pump", "Motor", "Compressor", "Conveyor", "CNC Machine", "Generator"] },
+        "location": { "type": "string", "description": "Factory floor sector location coordinate" },
+        "serialNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["Healthy", "Warning", "Critical", "Offline"] },
+        "criticalityLevel": { "type": "string", "enum": ["Low", "Medium", "High"] },
+        "installationDate": { "type": "string" },
+        "lastMaintenanceDate": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "type", "location", "serialNumber", "status", "criticalityLevel", "installationDate", "lastMaintenanceDate", "createdAt", "updatedAt"]
+    },
+    "SensorReading": {
+      "title": "SensorReading",
+      "description": "Raw multi-variable IoT sensor instrumentation logging",
+      "type": "object",
+      "properties": {
+        "machineId": { "type": "string" },
+        "temperature": { "type": "number" },
+        "vibration": { "type": "number" },
+        "pressure": { "type": "number" },
+        "rotationalSpeed": { "type": "number" },
+        "torque": { "type": "number" },
+        "toolWear": { "type": "number" },
+        "humidity": { "type": "number" },
+        "powerConsumption": { "type": "number" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["machineId", "temperature", "vibration", "pressure", "rotationalSpeed", "torque", "toolWear", "humidity", "powerConsumption", "timestamp"]
+    },
+    "Prediction": {
+      "title": "Prediction",
+      "description": "AI-derived predictive failure and maintenance recommendation analysis",
+      "type": "object",
+      "properties": {
+        "machineId": { "type": "string" },
+        "healthScore": { "type": "number" },
+        "failureProbability": { "type": "number" },
+        "riskLevel": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"] },
+        "recommendedAction": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["machineId", "healthScore", "failureProbability", "riskLevel", "recommendedAction", "updatedAt"]
+    },
+    "Alert": {
+      "title": "Alert",
+      "description": "Active Out-of-Bounds telemetry alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "machineId": { "type": "string" },
+        "machineName": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "severity": { "type": "string", "enum": ["Info", "Warning", "High", "Critical"] },
+        "status": { "type": "string", "enum": ["Active", "Acknowledged", "Resolved"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "machineId", "machineName", "title", "message", "severity", "status", "createdAt"]
+    },
+    "WorkOrder": {
+      "title": "WorkOrder",
+      "description": "Operational assignment repair worksheets dispatched to engineering technicians",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "machineId": { "type": "string" },
+        "machineName": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High", "Urgent"] },
+        "status": { "type": "string", "enum": ["Open", "In Progress", "Done", "Cancelled"] },
+        "dueDate": { "type": "string" },
+        "completedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "machineId", "machineName", "assignedTo", "priority", "status", "dueDate", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/machines/{machineId}": {
+      "schema": "Machine",
+      "description": "Registered heavy machinery items in the facility fleet"
+    },
+    "/sensorReadings/{readingId}": {
+      "schema": "SensorReading",
+      "description": "Recorded IoT sensor metrics from assets"
+    },
+    "/predictions/{predictionId}": {
+      "schema": "Prediction",
+      "description": "Calculated failure probabilities and actions"
+    },
+    "/alerts/{alertId}": {
+      "schema": "Alert",
+      "description": "Incident alerts from the predictive engine"
+    },
+    "/workOrders/{workOrderId}": {
+      "schema": "WorkOrder",
+      "description": "Operational task scheduling sheet"
+    }
+  }
+}
